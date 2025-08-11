@@ -1,0 +1,757 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Cowboy Racer: Mesa Run</title>
+<style>
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: #0e0d15;
+    height: 100%;
+    overscroll-behavior: none;
+    touch-action: none;
+    -webkit-user-select: none;
+    user-select: none;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+  }
+  #game {
+    display: block;
+    width: 100vw;
+    height: 100vh;
+    image-rendering: pixelated;
+    touch-action: none;
+  }
+  /* On-screen transparent controls */
+  .controls {
+    position: fixed;
+    inset: 0;
+    pointer-events: none; /* child buttons re-enable */
+  }
+  .btn {
+    position: absolute;
+    width: 22vmin;
+    height: 22vmin;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.08);
+    box-shadow: 0 0 0 2px rgba(255,255,255,0.08) inset;
+    pointer-events: auto;
+    touch-action: none;
+  }
+  .btn:active { background: rgba(255,255,255,0.16); }
+  /* D-pad cluster (left bottom) */
+  #btn-left  { left: 6vmin; bottom: 12vmin; }
+  #btn-right { left: 30vmin; bottom: 12vmin; }
+  #btn-up    { left: 18vmin; bottom: 24vmin; }
+  #btn-down  { left: 18vmin; bottom: 0vmin; }
+  /* Action button (right bottom) */
+  #btn-whip {
+    right: 6vmin; bottom: 10vmin;
+    width: 26vmin; height: 26vmin;
+    border-radius: 50%;
+    background: rgba(255,255,255,0.10);
+  }
+  .hint {
+    position: fixed; left: 50%; top: env(safe-area-inset-top, 8px);
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.55);
+    color: #fff; padding: 6px 10px; border-radius: 8px;
+    font-size: 14px; letter-spacing: .2px;
+  }
+  .overlay {
+    position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: linear-gradient(#120e1f, #1a132f 60%, #0b0913);
+    color: #f8f6ff; text-align: center; padding: 2rem;
+  }
+  .panel {
+    max-width: 900px; width: 92%;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.12);
+    border-radius: 16px;
+    padding: 1rem 1.25rem;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.35);
+    backdrop-filter: blur(6px);
+  }
+  .title {
+    font-size: clamp(28px, 4.5vw, 46px);
+    margin: .2rem 0 0.4rem;
+    letter-spacing: 1px;
+    text-shadow: 0 2px 0 rgba(0,0,0,0.25);
+  }
+  .subtitle {
+    font-size: clamp(16px, 2.3vw, 22px); opacity: .85; margin-bottom: 1rem;
+  }
+  .story {
+    text-align: left; line-height: 1.45; font-size: clamp(15px, 2vw, 18px);
+    color: #ece8ff;
+  }
+  .story b { color: #ffd28e; }
+  .actions { margin-top: 1rem; display: flex; gap: .5rem; flex-wrap: wrap; justify-content: center; }
+  .actions button {
+    background: #f05d5e; color: #fff; border: none; padding: .65rem 1rem;
+    border-radius: 10px; font-size: 16px; letter-spacing: .3px;
+  }
+  .actions button.secondary { background: #4d86ff; }
+  .actions button.ghost { background: transparent; border: 1px solid rgba(255,255,255,0.25); }
+  .pill {
+    display: inline-block; padding: 4px 10px; border-radius: 999px;
+    background: rgba(255,255,255,0.12); margin-bottom: 8px; font-size: 12px;
+  }
+  @media (hover: none) and (pointer: coarse) {
+    .hint { display: none; }
+  }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Cowboy Racer: Mesa Run"></canvas>
+
+<!-- Touch Controls -->
+<div class="controls" aria-hidden="false">
+  <div class="btn" id="btn-left"></div>
+  <div class="btn" id="btn-right"></div>
+  <div class="btn" id="btn-up"></div>
+  <div class="btn" id="btn-down"></div>
+  <div class="btn" id="btn-whip" title="Whip (Space)"></div>
+</div>
+
+<div class="hint">Keyboard: ← → to steer, ↑/↓ speed, Space to whip • Tap buttons on touch</div>
+
+<!-- Overlays -->
+<div class="overlay" id="menu">
+  <div class="panel">
+    <div class="pill">Single‑File • iPad‑Ready • 32‑bit‑ish</div>
+    <h1 class="title">Cowboy Racer: <span style="color:#ffd28e">Mesa Run</span></h1>
+    <div class="subtitle">Ride hard through the Southwest to rescue <b>Elena</b> from the outlaw <b>Blackjack Burke</b> and his <b>Desert Vipers</b>.</div>
+    <div class="story">
+      <p><b>Hero:</b> <i>Jesse Quill</i>, a quick‑witted trail medic turned rider. His trusty mare <i>Satchel</i> runs like a dust devil.</p>
+      <p><b>Villain:</b> <i>Blackjack Burke</i>, gambler‑turned‑bandit with a razor grin and a clockwork cuirass. He and his <b>Vipers</b> clog the road with ambushes.</p>
+      <p><b>Damsel:</b> <i>Elena Alvarado</i>, a frontier botanist who mapped hidden springs. She’s fierce, brilliant, and very much not okay with being kidnapped.</p>
+      <p><b>Goal:</b> Cross the desert, crack the Vipers with your <b>whip</b>, and duel Blackjack at the canyon gate. Rescue Elena and ride out before sundown.</p>
+    </div>
+    <div class="actions">
+      <button id="play">Ride Out (Enter)</button>
+      <button class="secondary" id="how">How to Play</button>
+      <button class="ghost" id="credits">Credits</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="howto" style="display:none">
+  <div class="panel">
+    <h2 class="title">How to Play</h2>
+    <div class="story">
+      <ul>
+        <li>Steer with <b>← →</b> (or tap Left/Right). Adjust speed with <b>↑ ↓</b>.</li>
+        <li>Use <b>Space</b> (or tap <b>WHIP</b>) to lash nearby road villains. Cooldown applies.</li>
+        <li>Avoid collisions; they chip your health. Smack foes to clear the way and gain score.</li>
+        <li>Ride the distance bar to the end to reach the <b>Boss</b> duel. Whip when his weak core flashes.</li>
+      </ul>
+    </div>
+    <div class="actions">
+      <button id="back1">Back</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="credit" style="display:none">
+  <div class="panel">
+    <h2 class="title">Credits & Notes</h2>
+    <div class="story">
+      <p>Design & code: <i>Single‑file HTML5 canvas</i>. No external assets. Optimized for iPad Safari.</p>
+      <p>Art style: 32‑bit‑inspired low‑poly/pixel hybrid. All sprites are procedural vectors for speed.</p>
+      <p>Accessibility: Keyboard & touch. Color‑safe HUD, readable text, simple controls.</p>
+    </div>
+    <div class="actions">
+      <button id="back2">Back</button>
+    </div>
+  </div>
+</div>
+
+<script>
+(()=>{
+'use strict';
+
+/* ===== Canvas & Utilities ===== */
+const canvas = document.getElementById('game');
+const ctx = canvas.getContext('2d', { alpha: false, desynchronized: true });
+let DPR = Math.max(1, Math.min(2, window.devicePixelRatio || 1)); // cap DPR for perf
+
+function resize(){
+  const w = Math.floor(window.innerWidth);
+  const h = Math.floor(window.innerHeight);
+  canvas.width  = Math.floor(w * DPR);
+  canvas.height = Math.floor(h * DPR);
+  canvas.style.width  = w + 'px';
+  canvas.style.height = h + 'px';
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+}
+resize();
+window.addEventListener('resize', resize, { passive: true });
+
+/* ===== Game State ===== */
+const State = {
+  MENU: 0,
+  PLAY: 1,
+  BOSS: 2,
+  WIN: 3,
+  LOSE: 4,
+};
+let game = null;
+
+function newGame(){
+  return {
+    state: State.MENU,
+    t: 0,
+    speed: 24,     // world units per second
+    targetSpeed: 24,
+    maxSpeed: 42,
+    minSpeed: 10,
+    lane: 0,       // -1 left, 0 center, 1 right
+    x: 0,          // smooth lane position
+    y: 0,
+    roadW: 520,
+    worldZ: 0,
+    health: 100,
+    score: 0,
+    whipCooldown: 0,
+    whipReady: true,
+    distance: 0,
+    distanceGoal: 2000, // reach boss
+    cactus: [],
+    villains: [],
+    particles: [],
+    boss: {
+      hp: 10,
+      active: false,
+      timer: 0,
+      phase: 0,
+      x: 0
+    }
+  };
+}
+game = newGame();
+
+/* ===== Input ===== */
+const keys = new Set();
+const justPressed = new Set();
+
+window.addEventListener('keydown', e=>{
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Enter'].includes(e.key)) e.preventDefault();
+  if (!keys.has(e.key)) justPressed.add(e.key);
+  keys.add(e.key);
+});
+window.addEventListener('keyup', e=>{
+  keys.delete(e.key);
+});
+
+// Touch buttons
+function bindBtn(id, downKey){
+  const el = document.getElementById(id);
+  let active=false;
+  function on(e){ e.preventDefault(); active=true; keys.add(downKey); }
+  function off(e){ e.preventDefault(); active=false; keys.delete(downKey); }
+  ['pointerdown','touchstart','mousedown'].forEach(ev=>el.addEventListener(ev,on));
+  ['pointerup','pointercancel','touchend','touchcancel','mouseup','mouseleave'].forEach(ev=>el.addEventListener(ev,off));
+}
+bindBtn('btn-left','ArrowLeft');
+bindBtn('btn-right','ArrowRight');
+bindBtn('btn-up','ArrowUp');
+bindBtn('btn-down','ArrowDown');
+bindBtn('btn-whip',' ');
+
+/* ===== UI Overlays ===== */
+const $ = sel => document.querySelector(sel);
+$('#play').addEventListener('click', ()=>{ closeAll(); startPlay(); });
+$('#how').addEventListener('click', ()=>{ $('#menu').style.display='none'; $('#howto').style.display='flex'; });
+$('#credits').addEventListener('click', ()=>{ $('#menu').style.display='none'; $('#credit').style.display='flex'; });
+$('#back1').addEventListener('click', ()=>{ closeAll(); $('#menu').style.display='flex'; });
+$('#back2').addEventListener('click', ()=>{ closeAll(); $('#menu').style.display='flex'; });
+function closeAll(){ ['#menu','#howto','#credit'].forEach(s=>$(s).style.display='none'); }
+function openMenu(){ closeAll(); $('#menu').style.display='flex'; }
+
+window.addEventListener('keydown', e=>{
+  if (game.state===State.MENU && e.key==='Enter'){ startPlay(); }
+});
+
+function startPlay(){
+  game = newGame();
+  game.state = State.PLAY;
+  closeAll();
+}
+
+/* ===== RNG ===== */
+let seed = Date.now() & 0xffffffff;
+function rand(){
+  // xorshift32
+  seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+  return ((seed>>>0) / 4294967296);
+}
+function rrange(a,b){ return a + rand()*(b-a); }
+function choice(arr){ return arr[(rand()*arr.length)|0]; }
+
+/* ===== World Helpers ===== */
+function lerp(a,b,t){ return a+(b-a)*t; }
+function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
+
+/* Perspective road rendering inspired by classic racers */
+function drawBackground(){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  // sky gradient
+  const g = ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0, '#2e1c5a'); // twilight violet
+  g.addColorStop(0.6, '#5f2f6d');
+  g.addColorStop(1, '#3b224a');
+  ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+
+  // Mesas (distant silhouettes)
+  ctx.save();
+  ctx.globalAlpha = 0.9;
+  function mesa(x, y, scale){
+    ctx.fillStyle = '#6f3f2a';
+    ctx.beginPath();
+    ctx.moveTo(x-60*scale, y);
+    ctx.lineTo(x-40*scale, y-40*scale);
+    ctx.lineTo(x-30*scale, y-38*scale);
+    ctx.lineTo(x-20*scale, y-60*scale);
+    ctx.lineTo(x+10*scale, y-58*scale);
+    ctx.lineTo(x+20*scale, y-36*scale);
+    ctx.lineTo(x+60*scale, y);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#9a5a3b';
+    ctx.fillRect(x-15*scale, y-58*scale, 10*scale, 30*scale); // butte
+  }
+  const my = h*0.5;
+  for(let i=0;i<6;i++){
+    mesa((i/5)*w + rrange(-30,30), my + rrange(-10,10), rrange(1.2, 1.8));
+  }
+  ctx.restore();
+}
+
+function drawRoad(){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const horizon = h*0.6;
+  const roadW = game.roadW;
+  // ground
+  ctx.fillStyle = '#3a2a22'; ctx.fillRect(0,horizon,w,h-horizon);
+
+  // road with faux perspective strips
+  for(let y=0;y< h-horizon; y+=4){
+    const t = y/(h-horizon);
+    const half = (1 - t)*roadW*0.5 + 80;
+    const center = w*0.5 + Math.sin(game.worldZ*0.0006 + t*4)*40; // subtle sway
+    const left = center - half;
+    const right = center + half;
+    ctx.fillStyle = ( (y>>2) & 1 ) ? '#473630' : '#4f3e36';
+    ctx.fillRect(left, horizon+y, right-left, 4);
+    // roadside stripe
+    ctx.fillStyle = '#6a4d3d';
+    ctx.fillRect(left-6, horizon+y, 6, 4);
+    ctx.fillRect(right, horizon+y, 6, 4);
+  }
+}
+
+/* Entities */
+function spawnCactus(){
+  const side = choice([-1,1]);
+  game.cactus.push({
+    x: side*rrange(340, 520), z: game.distance + rrange(80, 260), h: rrange(60,120), type: choice([0,1,2])
+  });
+}
+function drawCactus(c){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const horizon = h*0.6;
+  // project depth to screen
+  const dz = c.z - game.distance;
+  if (dz < 5) return;
+  const t = 1 / dz;
+  const scale = clamp(400 * t, 0, 3.5);
+  const center = w*0.5 + Math.sin((game.worldZ + dz)*0.0006 + (1/dz)*2)*40;
+  const sx = center + c.x * t;
+  const sy = horizon + (h-horizon) * (1 - t);
+
+  // saguaro-ish shape
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(scale, scale);
+  ctx.fillStyle = '#2a7d3b';
+  // trunk
+  ctx.fillRect(-4, -c.h, 8, c.h);
+  // arms
+  ctx.fillRect(-12, -c.h*0.6, 6, c.h*0.35);
+  ctx.fillRect( 6, -c.h*0.45, 6, c.h*0.3);
+  ctx.restore();
+}
+
+function spawnVillain(){
+  // on road, in lane -1,0,1
+  const lane = choice([-1,0,1]);
+  game.villains.push({
+    lane,
+    z: game.distance + rrange(120, 260),
+    alive: true,
+    t: 0,
+  });
+}
+function drawVillain(v){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const horizon = h*0.6;
+  const dz = v.z - game.distance;
+  if (dz < 5) return;
+  const t = 1 / dz;
+  const center = w*0.5 + Math.sin(game.worldZ*0.0006 + t*200)*40;
+  const laneOffset = (v.lane * (game.roadW*0.27)) * t;
+  const sx = center + laneOffset;
+  const sy = horizon + (h-horizon) * (1 - t);
+  const scale = clamp(420 * t, 0, 4.5);
+
+  // bandit biker-ish horse (simplified)
+  ctx.save();
+  ctx.translate(sx, sy);
+  ctx.scale(scale, scale);
+  // body
+  ctx.fillStyle = '#7a3b2b';
+  ctx.fillRect(-8, -18, 16, 10);
+  // head
+  ctx.fillStyle = '#3c1c14';
+  ctx.fillRect(-4, -24, 8, 6);
+  // hat
+  ctx.fillStyle = '#1a0f0b';
+  ctx.fillRect(-10, -26, 20, 3);
+  ctx.fillRect(-6, -29, 12, 3);
+  // legs
+  ctx.fillStyle = '#2c120d';
+  ctx.fillRect(-7, -8, 3, 8);
+  ctx.fillRect( 4, -8, 3, 8);
+  ctx.restore();
+}
+
+function drawPlayer(){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const horizon = h*0.6;
+  // player stays near bottom
+  const center = w*0.5;
+  const roadX = (game.lane * (game.roadW*0.27));
+  game.x = lerp(game.x, roadX, 0.18);
+  const x = center + game.x;
+  const y = h*0.88;
+
+  // horse & rider silhouette (procedural 32-bit-ish)
+  ctx.save();
+  ctx.translate(x, y);
+  const bob = Math.sin(game.t*8)*2;
+  ctx.translate(0, bob);
+  // horse body
+  ctx.fillStyle = '#c0734c';
+  ctx.fillRect(-24, -26, 52, 18);
+  // head
+  ctx.fillStyle = '#8a4d2e';
+  ctx.fillRect(22, -36, 14, 10);
+  // mane
+  ctx.fillStyle = '#2b1b1b';
+  ctx.fillRect(16, -36, 4, 12);
+  // legs
+  ctx.fillStyle = '#5b2e21';
+  ctx.fillRect(-18, -8, 4, 12);
+  ctx.fillRect(8, -8, 4, 12);
+  // rider
+  ctx.fillStyle = '#2c2b62';
+  ctx.fillRect(-4, -40, 12, 16); // torso
+  ctx.fillStyle = '#111';
+  ctx.fillRect(-6, -44, 16, 4);  // arms
+  // hat
+  ctx.fillStyle = '#1a0f0b';
+  ctx.fillRect(-10, -46, 18, 3);
+  ctx.fillRect(-6, -49, 10, 3);
+  ctx.restore();
+}
+
+function drawWhip(){
+  if (!game.whipReady) {
+    // cooldown meter above player
+    const w = canvas.width / DPR, h = canvas.height / DPR;
+    const x = w*0.5 + game.x;
+    const y = h*0.82;
+    const cd = clamp(1 - game.whipCooldown/0.7, 0, 1);
+    ctx.fillStyle = '#ffffffaa';
+    ctx.fillRect(x-30, y, 60*cd, 4);
+    ctx.strokeStyle = '#ffffff55';
+    ctx.strokeRect(x-30, y, 60, 4);
+  }
+}
+
+/* Collisions & Mechanics */
+function checkCollisions(dt){
+  // player z ~ game.distance; villains have z forward
+  for (const v of game.villains){
+    if (!v.alive) continue;
+    const dz = v.z - game.distance;
+    if (dz < 16 && dz > -6 && v.lane === game.lane){
+      // collision
+      v.alive = false;
+      game.health -= 18;
+      game.score = Math.max(0, game.score - 10);
+      spawnSparks(0, -20);
+    }
+  }
+}
+
+function tryWhip(){
+  if (!game.whipReady) return;
+  game.whipReady = false;
+  game.whipCooldown = 0.7;
+  // hit nearest villain in front in same lane within range
+  let best=null, bestDz=1e9;
+  for (const v of game.villains){
+    if (!v.alive) continue;
+    const dz = v.z - game.distance;
+    if (v.lane===game.lane && dz>0 && dz<60 && dz<bestDz){
+      best=v; bestDz=dz;
+    }
+  }
+  if (game.state===State.BOSS && game.boss.active){
+    // boss weak window
+    if (game.boss.phase===1){
+      game.boss.hp -= 1;
+      spawnSparks(0,-40,true);
+    }
+  }
+  if (best){
+    best.alive = false;
+    game.score += 25;
+    spawnSparks(0,-30);
+  }
+}
+
+function spawnSparks(x,y,gold=false){
+  for(let i=0;i<16;i++){
+    game.particles.push({
+      x: (canvas.width/DPR)*0.5 + game.x + x + rrange(-6,6),
+      y: (canvas.height/DPR)*0.88 + y + rrange(-6,6),
+      vx: rrange(-60,60),
+      vy: rrange(-140,-60),
+      life: rrange(0.3,0.6),
+      gold
+    });
+  }
+}
+
+function updateParticles(dt){
+  for (const p of game.particles){
+    p.life -= dt;
+    p.x += p.vx*dt;
+    p.y += p.vy*dt;
+    p.vy += 240*dt;
+  }
+  game.particles = game.particles.filter(p=>p.life>0);
+}
+function drawParticles(){
+  ctx.save();
+  for (const p of game.particles){
+    ctx.globalAlpha = Math.max(0, p.life*1.6);
+    ctx.fillStyle = p.gold ? '#ffd27a' : '#ffffff';
+    ctx.fillRect(p.x|0, p.y|0, 2, 2);
+  }
+  ctx.restore();
+}
+
+/* Boss Encounter */
+function startBoss(){
+  game.state = State.BOSS;
+  game.boss.active = true;
+  game.boss.hp = 10;
+  game.boss.phase = 0;
+  game.boss.timer = 0;
+}
+function updateBoss(dt){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  const horizon = h*0.6;
+  game.boss.timer += dt;
+  // simple phases: 0 approach, 1 core exposed, repeat
+  if (game.boss.timer>2.0){
+    game.boss.timer=0;
+    game.boss.phase = (game.boss.phase===0)?1:0;
+  }
+  // attacks: spawn fake villains to dodge
+  if (rand()<0.02){
+    spawnVillain();
+  }
+  // draw boss at front (no perspective, fixed screen)
+  const x = w*0.5;
+  const y = horizon + 60;
+  ctx.save();
+  ctx.translate(x, y);
+  // body
+  ctx.fillStyle = '#2a2134';
+  ctx.fillRect(-80, -80, 160, 100);
+  // armored core
+  ctx.fillStyle = (game.boss.phase===1) ? '#ff6b6b' : '#6b6b6b';
+  ctx.fillRect(-18, -40, 36, 36);
+  // head + hat
+  ctx.fillStyle = '#1a0f0b';
+  ctx.fillRect(-30, -92, 60, 10);
+  ctx.fillRect(-16, -100, 32, 8);
+  // shoulders
+  ctx.fillStyle = '#42324f';
+  ctx.fillRect(-100, -70, 30, 60);
+  ctx.fillRect( 70, -70, 30, 60);
+  ctx.restore();
+
+  // boss HUD
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('BLACKJACK BURKE', 18, 28);
+  ctx.strokeStyle = '#ffffff88';
+  ctx.strokeRect(16, 36, w-32, 10);
+  const hpw = (w-32) * (clamp(game.boss.hp,0,10)/10);
+  ctx.fillStyle = '#ff6b6b';
+  ctx.fillRect(16, 36, hpw, 10);
+
+  if (game.boss.hp<=0){
+    game.state = State.WIN;
+  }
+}
+
+/* ===== Main Update/Render ===== */
+let last=performance.now();
+function frame(now){
+  const dt = Math.min(0.033, (now-last)/1000); last = now;
+  game.t += dt;
+
+  // Menu backdrop
+  if (game.state===State.MENU){
+    drawBackground(); drawRoad();
+    drawPlayer();
+    requestAnimationFrame(frame); return;
+  }
+
+  // Input -> target speed & lane
+  if (keys.has('ArrowLeft'))  game.lane = clamp(game.lane-1, -1, 1);
+  if (keys.has('ArrowRight')) game.lane = clamp(game.lane+1, -1, 1);
+  if (keys.has('ArrowUp'))    game.targetSpeed = Math.min(game.maxSpeed, game.targetSpeed + 40*dt);
+  if (keys.has('ArrowDown'))  game.targetSpeed = Math.max(game.minSpeed, game.targetSpeed - 40*dt);
+  if (justPressed.has(' '))   tryWhip();
+  justPressed.clear();
+
+  // Smooth speed
+  game.speed = lerp(game.speed, game.targetSpeed, 0.08);
+
+  // Time & distance
+  game.distance += game.speed * dt;
+  game.worldZ += game.speed * dt;
+
+  // Spawns
+  if (rand()<0.04) spawnCactus();
+  if (game.state===State.PLAY && rand()<0.03) spawnVillain();
+
+  // Collisions
+  checkCollisions(dt);
+
+  // Cooldowns
+  if (!game.whipReady){
+    game.whipCooldown -= dt;
+    if (game.whipCooldown<=0){ game.whipCooldown=0; game.whipReady=true; }
+  }
+
+  // Clear
+  ctx.clearRect(0,0,canvas.width/DPR, canvas.height/DPR);
+
+  // World
+  drawBackground();
+  drawRoad();
+
+  // Entities (sorted by depth)
+  game.cactus = game.cactus.filter(c=>c.z>game.distance-10);
+  const drawC = [];
+  for (const c of game.cactus) drawC.push({z:c.z, fn:()=>drawCactus(c)});
+  for (const v of game.villains){
+    if (!v.alive) continue;
+    drawC.push({z:v.z, fn:()=>drawVillain(v)});
+  }
+  drawC.sort((a,b)=>a.z-b.z);
+  for (const d of drawC) d.fn();
+
+  // Player & FX
+  drawPlayer();
+  drawWhip();
+  updateParticles(dt);
+  drawParticles();
+
+  // HUD
+  drawHUD();
+
+  // State transitions
+  if (game.health<=0){ game.state=State.LOSE; }
+  if (game.state===State.PLAY && game.distance>=game.distanceGoal){ startBoss(); }
+  if (game.state===State.BOSS){ updateBoss(dt); }
+
+  // Game over / Win overlays as inline screens
+  if (game.state===State.WIN){
+    drawBanner('You rescued Elena! Ride on, Jesse.', 'Play Again (Enter)');
+    if (keys.has('Enter')) startPlay();
+  } else if (game.state===State.LOSE){
+    drawBanner('You were thrown from the saddle...', 'Retry (Enter)');
+    if (keys.has('Enter')) startPlay();
+  }
+
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+
+function drawHUD(){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '16px system-ui, -apple-system, sans-serif';
+  // Speed
+  ctx.fillText(`SPD ${Math.round(game.speed)}`, 16, 20);
+  // Health
+  ctx.fillText('HP', 16, 40);
+  ctx.strokeStyle = '#ffffff88';
+  ctx.strokeRect(40, 32, 120, 10);
+  ctx.fillStyle = '#66ffa8';
+  ctx.fillRect(40, 32, 120*(clamp(game.health,0,100)/100), 10);
+  // Distance
+  const distPct = clamp(game.distance/game.distanceGoal, 0, 1);
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText('DIST', 16, 64);
+  ctx.strokeStyle = '#ffffff88';
+  ctx.strokeRect(60, 56, 160, 10);
+  ctx.fillStyle = '#ffd27a';
+  ctx.fillRect(60, 56, 160*distPct, 10);
+  // Score
+  ctx.fillStyle = '#ffffff';
+  ctx.fillText(`SCORE ${game.score}`, w-160, 20);
+  // Whip
+  ctx.fillStyle = game.whipReady ? '#ffffff' : '#ffffff66';
+  ctx.fillText(`[SPACE] WHIP`, w-160, 40);
+}
+
+function drawBanner(title, cta){
+  const w = canvas.width / DPR, h = canvas.height / DPR;
+  ctx.save();
+  ctx.fillStyle = 'rgba(0,0,0,0.5)';
+  ctx.fillRect(0,0,w,h);
+  // panel
+  const pw = Math.min(540, w*0.9), ph = 160;
+  const px = (w-pw)/2, py = (h-ph)/2;
+  ctx.fillStyle = 'rgba(255,255,255,0.08)';
+  ctx.fillRect(px, py, pw, ph);
+  ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+  ctx.strokeRect(px, py, pw, ph);
+  ctx.fillStyle = '#fff';
+  ctx.font = '22px system-ui, -apple-system, sans-serif';
+  ctx.fillText(title, px+18, py+48);
+  ctx.font = '16px system-ui, -apple-system, sans-serif';
+  ctx.fillText(cta, px+18, py+100);
+  ctx.restore();
+}
+
+// Prevent iOS gestures from interfering
+['gesturestart','gesturechange','gestureend','dblclick'].forEach(ev=>{
+  window.addEventListener(ev, e=>e.preventDefault(), { passive:false });
+});
+
+})();</script>
+</body>
+</html>
