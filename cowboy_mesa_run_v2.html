@@ -1,0 +1,351 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<title>Cowboy Racer: Mesa Run — v2 (Smooth)</title>
+<style>
+  html, body { margin:0; padding:0; height:100%; background:#0e0d15;
+    font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif;
+    overscroll-behavior:none; touch-action:none; -webkit-user-select:none; user-select:none; overflow:hidden;
+  }
+  #game { display:block; width:100vw; height:100vh; touch-action:none; }
+  .controls{ position:fixed; inset:0; pointer-events:none; }
+  .btn{ position:absolute; width:22vmin; height:22vmin; border-radius:50%;
+        background:rgba(255,255,255,.08); box-shadow:0 0 0 2px rgba(255,255,255,.08) inset;
+        pointer-events:auto; touch-action:none; }
+  .btn:active{ background:rgba(255,255,255,.16); }
+  #btn-left{ left:6vmin; bottom:12vmin; }
+  #btn-right{ left:30vmin; bottom:12vmin; }
+  #btn-up{ left:18vmin; bottom:24vmin; }
+  #btn-down{ left:18vmin; bottom:0; }
+  #btn-whip{ right:6vmin; bottom:10vmin; width:26vmin; height:26vmin; border-radius:50%;
+             background:rgba(255,255,255,.10); }
+  .hint{ position:fixed; left:50%; top:env(safe-area-inset-top,8px); transform:translateX(-50%);
+         background:rgba(0,0,0,.55); color:#fff; padding:6px 10px; border-radius:8px; font-size:14px; }
+  @media (hover:none) and (pointer:coarse){ .hint{ display:none; } }
+  .overlay{ position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+            background:linear-gradient(#120e1f,#1a132f 60%,#0b0913); color:#f8f6ff; padding:2rem; }
+  .panel{ max-width:900px; width:92%; background:rgba(255,255,255,.06); border:1px solid rgba(255,255,255,.12);
+          border-radius:16px; padding:1rem 1.25rem; box-shadow:0 10px 40px rgba(0,0,0,.35); backdrop-filter:blur(6px); }
+  .title{ font-size:clamp(28px,4.5vw,46px); margin:.2rem 0 .4rem; letter-spacing:1px; text-shadow:0 2px 0 rgba(0,0,0,.25); }
+  .subtitle{ font-size:clamp(16px,2.3vw,22px); opacity:.85; margin-bottom:1rem; }
+  .story{ text-align:left; line-height:1.45; font-size:clamp(15px,2vw,18px); color:#ece8ff; }
+  .story b{ color:#ffd28e; }
+  .actions{ margin-top:1rem; display:flex; gap:.5rem; flex-wrap:wrap; justify-content:center; }
+  .actions button{ background:#f05d5e; color:#fff; border:none; padding:.65rem 1rem; border-radius:10px; font-size:16px; }
+  .actions button.secondary{ background:#4d86ff; } .actions button.ghost{ background:transparent; border:1px solid rgba(255,255,255,.25); }
+</style>
+</head>
+<body>
+<canvas id="game" aria-label="Cowboy Racer: Mesa Run"></canvas>
+
+<div class="controls" aria-hidden="false">
+  <div class="btn" id="btn-left"></div>
+  <div class="btn" id="btn-right"></div>
+  <div class="btn" id="btn-up"></div>
+  <div class="btn" id="btn-down"></div>
+  <div class="btn" id="btn-whip" title="Whip (Space)"></div>
+</div>
+
+<div class="hint">Keyboard: ← → steer • ↑/↓ speed • Space to whip • Tap buttons on touch</div>
+
+<div class="overlay" id="menu">
+  <div class="panel">
+    <div class="subtitle">Single-file • iPad-ready • Smooth vectors</div>
+    <h1 class="title">Cowboy Racer: <span style="color:#ffd28e">Mesa Run</span></h1>
+    <div class="story">
+      <p><b>Hero:</b> Jesse Quill and his mare <i>Satchel</i>.</p>
+      <p><b>Villain:</b> Blackjack Burke and the <b>Desert Vipers</b>.</p>
+      <p><b>Damsel:</b> Elena Alvarado, frontier botanist.</p>
+      <p><b>Goal:</b> Race the canyon road, lash ambushers with your <b>whip</b>, then crack Burke’s core when it flashes.</p>
+    </div>
+    <div class="actions">
+      <button id="play">Ride Out (Enter)</button>
+      <button class="secondary" id="how">How to Play</button>
+      <button class="ghost" id="credits">Credits</button>
+    </div>
+  </div>
+</div>
+
+<div class="overlay" id="howto" style="display:none">
+  <div class="panel">
+    <h2 class="title">How to Play</h2>
+    <div class="story">
+      <ul>
+        <li>Steer with <b>← →</b> or the touch D-pad. Speed with <b>↑/↓</b>.</li>
+        <li><b>Space</b> (or tap the big button) to whip a foe in your lane within range.</li>
+        <li>Avoid hits; clear foes for points. Fill the distance bar to reach the boss.</li>
+      </ul>
+    </div>
+    <div class="actions"><button id="back1">Back</button></div>
+  </div>
+</div>
+
+<div class="overlay" id="credit" style="display:none">
+  <div class="panel">
+    <h2 class="title">Credits</h2>
+    <div class="story"><p>Procedural vector art, no images, optimized for iPad Safari/Chrome.</p></div>
+    <div class="actions"><button id="back2">Back</button></div>
+  </div>
+</div>
+
+<script>
+(()=>{
+'use strict';
+const canvas=document.getElementById('game');
+const ctx=canvas.getContext('2d',{alpha:false,desynchronized:true});
+let DPR=Math.max(1,Math.min(2,window.devicePixelRatio||1));
+function resize(){const w=Math.floor(window.innerWidth),h=Math.floor(window.innerHeight);
+  canvas.width=Math.floor(w*DPR); canvas.height=Math.floor(h*DPR);
+  canvas.style.width=w+'px'; canvas.style.height=h+'px'; ctx.setTransform(DPR,0,0,DPR,0,0);}
+resize(); window.addEventListener('resize',resize,{passive:true});
+
+const State={MENU:0,PLAY:1,BOSS:2,WIN:3,LOSE:4};
+let game=null;
+function newGame(){return{state:0,t:0,speed:24,targetSpeed:26,maxSpeed:46,minSpeed:10,
+  lane:0,x:0,roadW:520,worldZ:0,health:100,score:0,whipCooldown:0,whipReady:true,
+  distance:0,distanceGoal:2200,cactus:[],villains:[],particles:[],spawnDelay:1.2,
+  boss:{hp:10,active:false,timer:0,phase:0}};}
+game=newGame();
+
+/* Input */
+const keys=new Set(), justPressed=new Set();
+window.addEventListener('keydown',e=>{
+  if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Enter'].includes(e.key)) e.preventDefault();
+  if(!keys.has(e.key)) justPressed.add(e.key); keys.add(e.key);
+}); window.addEventListener('keyup',e=>keys.delete(e.key));
+function bindBtn(id,key){const el=document.getElementById(id);
+  const on=e=>{e.preventDefault(); keys.add(key)}; const off=e=>{e.preventDefault(); keys.delete(key)};
+  ['pointerdown','touchstart','mousedown'].forEach(v=>el.addEventListener(v,on));
+  ['pointerup','pointercancel','touchend','touchcancel','mouseup','mouseleave'].forEach(v=>el.addEventListener(v,off));
+}
+bindBtn('btn-left','ArrowLeft'); bindBtn('btn-right','ArrowRight');
+bindBtn('btn-up','ArrowUp'); bindBtn('btn-down','ArrowDown'); bindBtn('btn-whip',' ');
+
+/* UI */
+const $=s=>document.querySelector(s);
+$('#play').addEventListener('click',()=>{closeAll(); startPlay();});
+$('#how').addEventListener('click',()=>{$('#menu').style.display='none'; $('#howto').style.display='flex';});
+$('#credits').addEventListener('click',()=>{$('#menu').style.display='none'; $('#credit').style.display='flex';});
+$('#back1').addEventListener('click',()=>{closeAll(); $('#menu').style.display='flex';});
+$('#back2').addEventListener('click',()=>{closeAll(); $('#menu').style.display='flex';});
+function closeAll(){['#menu','#howto','#credit'].forEach(s=>$(s).style.display='none');}
+function startPlay(){game=newGame(); game.state=State.PLAY; closeAll();}
+window.addEventListener('keydown',e=>{if(game.state===State.MENU && e.key==='Enter') startPlay();});
+
+/* RNG helpers */
+let seed=Date.now()&0xffffffff;
+function rand(){seed^=seed<<13; seed^=seed>>>17; seed^=seed<<5; return((seed>>>0)/4294967296);}
+const rrange=(a,b)=>a+rand()*(b-a);
+const choice=a=>a[(rand()*a.length)|0];
+const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
+const lerp=(a,b,t)=>a+(b-a)*t;
+
+/* Rendering */
+function drawBackground(){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  const g=ctx.createLinearGradient(0,0,0,h);
+  g.addColorStop(0,'#2e1c5a'); g.addColorStop(0.6,'#5f2f6d'); g.addColorStop(1,'#3b224a');
+  ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
+  // mesas
+  ctx.save(); ctx.globalAlpha=0.9;
+  const my=h*0.5;
+  function mesa(x,y,s){ctx.fillStyle='#6f3f2a'; ctx.beginPath();
+    ctx.moveTo(x-60*s,y); ctx.lineTo(x-40*s,y-40*s); ctx.lineTo(x-30*s,y-38*s);
+    ctx.lineTo(x-20*s,y-60*s); ctx.lineTo(x+10*s,y-58*s); ctx.lineTo(x+20*s,y-36*s);
+    ctx.lineTo(x+60*s,y); ctx.closePath(); ctx.fill();
+    ctx.fillStyle='#9a5a3b'; ctx.fillRect(x-15*s,y-58*s,10*s,30*s); }
+  for(let i=0;i<6;i++) mesa((i/5)*w+rrange(-30,30), my+rrange(-10,10), rrange(1.2,1.8));
+  ctx.restore();
+}
+function drawRoad(){
+  const w=canvas.width/DPR,h=canvas.height/DPR,hz=h*0.62, roadW=game.roadW;
+  ctx.fillStyle='#3a2a22'; ctx.fillRect(0,hz,w,h-hz);
+  for(let y=0;y<h-hz;y+=4){
+    const t=y/(h-hz), half=(1-t)*roadW*0.5 + 76;
+    const center=w*0.5 + Math.sin(game.worldZ*0.00055 + t*3.6)*38;
+    const left=center-half, right=center+half;
+    ctx.fillStyle=((y>>2)&1)?'#473630':'#4f3e36'; ctx.fillRect(left,hz+y,right-left,4);
+    ctx.fillStyle='#6a4d3d'; ctx.fillRect(left-6,hz+y,6,4); ctx.fillRect(right,hz+y,6,4);
+  }
+}
+
+/* Entities */
+function spawnCactus(){
+  const off = game.roadW*0.6; // keep off-road
+  game.cactus.push({ x: choice([-1,1])*rrange(off+80, off+220),
+    z: game.distance + rrange(180, 360), h: rrange(60,120) });
+}
+function drawCactus(c){
+  const w=canvas.width/DPR,h=canvas.height/DPR,hz=h*0.62, dz=c.z-game.distance; if(dz<6) return;
+  const t=1/dz, scale=clamp(380*t,0,3.2);
+  const center=w*0.5 + Math.sin((game.worldZ+dz)*0.00055 + (1/dz)*2)*38;
+  const sx=center + c.x*t, sy=hz + (h-hz)*(1-t);
+  ctx.save(); ctx.translate(sx,sy); ctx.scale(scale,scale);
+  ctx.fillStyle='#2a7d3b'; ctx.fillRect(-4,-c.h,8,c.h);
+  ctx.fillRect(-12,-c.h*0.6,6,c.h*0.35); ctx.fillRect(6,-c.h*0.45,6,c.h*0.3);
+  ctx.restore();
+}
+function spawnVillain(){ const lane=choice([-1,0,1]);
+  game.villains.push({ lane, z: game.distance+rrange(160,280), alive:true });
+}
+function drawVillain(v){
+  const w=canvas.width/DPR,h=canvas.height/DPR,hz=h*0.62, dz=v.z-game.distance; if(dz<6) return;
+  const t=1/dz, center=w*0.5 + Math.sin(game.worldZ*0.00055 + t*180)*36;
+  const sx=center + (v.lane*(game.roadW*0.27))*t, sy=hz + (h-hz)*(1-t), scale=clamp(420*t,0,4.3);
+  ctx.save(); ctx.translate(sx,sy); ctx.scale(scale,scale);
+  ctx.fillStyle='#7a3b2b'; ctx.fillRect(-8,-18,16,10);
+  ctx.fillStyle='#3c1c14'; ctx.fillRect(-4,-24,8,6);
+  ctx.fillStyle='#1a0f0b'; ctx.fillRect(-10,-26,20,3); ctx.fillRect(-6,-29,12,3);
+  ctx.fillStyle='#2c120d'; ctx.fillRect(-7,-8,3,8); ctx.fillRect(4,-8,3,8);
+  ctx.restore();
+}
+function drawPlayer(){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  const center=w*0.5; const targetX = game.lane*(game.roadW*0.27);
+  game.x = lerp(game.x, targetX, 0.18);
+  const x=center+game.x, y=h*0.9;
+  ctx.save(); ctx.translate(x,y); ctx.translate(0,Math.sin(game.t*8)*2);
+  ctx.fillStyle='#c0734c'; ctx.fillRect(-24,-26,52,18);
+  ctx.fillStyle='#8a4d2e'; ctx.fillRect(22,-36,14,10);
+  ctx.fillStyle='#2b1b1b'; ctx.fillRect(16,-36,4,12);
+  ctx.fillStyle='#5b2e21'; ctx.fillRect(-18,-8,4,12); ctx.fillRect(8,-8,4,12);
+  ctx.fillStyle='#2c2b62'; ctx.fillRect(-4,-40,12,16);
+  ctx.fillStyle='#111'; ctx.fillRect(-6,-44,16,4);
+  ctx.fillStyle='#1a0f0b'; ctx.fillRect(-10,-46,18,3); ctx.fillRect(-6,-49,10,3);
+  ctx.restore();
+}
+
+/* Mechanics */
+function checkCollisions(){
+  for(const v of game.villains){
+    if(!v.alive) continue;
+    const dz=v.z-game.distance;
+    if(dz<18 && dz>-8 && v.lane===game.lane){
+      v.alive=false; game.health-=18; game.score=Math.max(0,game.score-10); spawnSparks(0,-20);
+    }
+  }
+}
+function tryWhip(){
+  if(!game.whipReady) return;
+  game.whipReady=false; game.whipCooldown=0.65;
+  let best=null, bestDz=1e9;
+  for(const v of game.villains){
+    if(!v.alive) continue;
+    const dz=v.z-game.distance;
+    if(v.lane===game.lane && dz>0 && dz<64 && dz<bestDz){ best=v; bestDz=dz; }
+  }
+  if(game.state===State.BOSS && game.boss.active && game.boss.phase===1){ game.boss.hp--; spawnSparks(0,-40,true); }
+  if(best){ best.alive=false; game.score+=25; spawnSparks(0,-30); }
+}
+function spawnSparks(x,y,gold=false){
+  for(let i=0;i<16;i++) game.particles.push({
+    x:(canvas.width/DPR)*0.5+game.x+x+rrange(-6,6),
+    y:(canvas.height/DPR)*0.9+y+rrange(-6,6),
+    vx:rrange(-60,60), vy:rrange(-140,-60), life:rrange(0.3,0.6), gold });
+}
+function updateParticles(dt){
+  for(const p of game.particles){ p.life-=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; p.vy+=240*dt; }
+  game.particles=game.particles.filter(p=>p.life>0);
+}
+function drawParticles(){ ctx.save();
+  for(const p of game.particles){ ctx.globalAlpha=Math.max(0,p.life*1.6);
+    ctx.fillStyle=p.gold?'#ffd27a':'#ffffff'; ctx.fillRect(p.x|0,p.y|0,2,2); }
+  ctx.restore(); }
+
+/* Boss */
+function startBoss(){ game.state=State.BOSS; game.boss.active=true; game.boss.hp=10; game.boss.timer=0; game.boss.phase=0; }
+function updateBoss(dt){
+  const w=canvas.width/DPR,h=canvas.height/DPR,hz=h*0.62;
+  game.boss.timer+=dt; if(game.boss.timer>2){ game.boss.timer=0; game.boss.phase=game.boss.phase?0:1; }
+  if(rand()<0.024) spawnVillain();
+  // draw boss
+  const x=w*0.5,y=hz+64;
+  ctx.save(); ctx.translate(x,y);
+  ctx.fillStyle='#2a2134'; ctx.fillRect(-84,-84,168,110);
+  ctx.fillStyle=game.boss.phase? '#ff6b6b':'#6b6b6b'; ctx.fillRect(-20,-42,40,40);
+  ctx.fillStyle='#1a0f0b'; ctx.fillRect(-34,-98,68,12); ctx.fillRect(-20,-108,40,8);
+  ctx.fillStyle='#42324f'; ctx.fillRect(-108,-74,34,64); ctx.fillRect(74,-74,34,64);
+  ctx.restore();
+  // boss HUD
+  ctx.fillStyle='#ffffff'; ctx.font='16px system-ui,-apple-system,sans-serif';
+  ctx.fillText('BLACKJACK BURKE', 18, 28);
+  ctx.strokeStyle='#ffffff88'; ctx.strokeRect(16,36,w-32,10);
+  const hpw=(w-32)*(Math.max(0,Math.min(10,game.boss.hp))/10);
+  ctx.fillStyle='#ff6b6b'; ctx.fillRect(16,36,hpw,10);
+  if(game.boss.hp<=0) game.state=State.WIN;
+}
+
+/* HUD */
+function drawHUD(){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  ctx.fillStyle='#fff'; ctx.font='16px system-ui,-apple-system,sans-serif';
+  ctx.fillText(`SPD ${Math.round(game.speed)}`,16,20);
+  ctx.fillText('HP',16,40); ctx.strokeStyle='#ffffff88'; ctx.strokeRect(40,32,120,10);
+  ctx.fillStyle='#66ffa8'; ctx.fillRect(40,32,120*(Math.max(0,Math.min(100,game.health))/100),10);
+  const distPct=Math.max(0,Math.min(1, game.distance/game.distanceGoal));
+  ctx.fillStyle='#fff'; ctx.fillText('DIST',16,64); ctx.strokeStyle='#ffffff88'; ctx.strokeRect(60,56,160,10);
+  ctx.fillStyle='#ffd27a'; ctx.fillRect(60,56,160*distPct,10);
+  ctx.fillStyle='#fff'; ctx.fillText(`SCORE ${game.score}`, w-160, 20);
+  ctx.fillStyle=game.whipReady ? '#fff' : '#ffffff66'; ctx.fillText('[SPACE] WHIP', w-160, 40);
+}
+function drawWhipCD(){ if(!game.whipReady){
+  const w=canvas.width/DPR,h=canvas.height/DPR,x=w*0.5+game.x,y=h*0.84;
+  const cd=1 - (game.whipCooldown/0.65); ctx.fillStyle='#ffffffaa'; ctx.fillRect(x-30,y,60*Math.max(0,cd),4);
+  ctx.strokeStyle='#ffffff55'; ctx.strokeRect(x-30,y,60,4);
+}}
+
+/* Loop */
+let last=performance.now();
+function frame(now){
+  const dt=Math.min(0.033,(now-last)/1000); last=now; game.t+=dt;
+  if(game.state===State.MENU){ drawBackground(); drawRoad(); drawPlayer(); requestAnimationFrame(frame); return; }
+  // input
+  if(keys.has('ArrowLeft')) game.lane=Math.max(-1,game.lane-1);
+  if(keys.has('ArrowRight')) game.lane=Math.min(1,game.lane+1);
+  if(keys.has('ArrowUp')) game.targetSpeed=Math.min(game.maxSpeed, game.targetSpeed + 40*dt);
+  if(keys.has('ArrowDown')) game.targetSpeed=Math.max(game.minSpeed, game.targetSpeed - 40*dt);
+  if(justPressed.has(' ')) tryWhip(); justPressed.clear();
+  // motion
+  game.speed = lerp(game.speed, game.targetSpeed, 0.08);
+  game.distance += game.speed*dt; game.worldZ += game.speed*dt;
+  // spawning
+  if(game.spawnDelay>0) game.spawnDelay-=dt; else { if(rand()<0.05) spawnCactus(); if(rand()<0.035 && game.state===State.PLAY) spawnVillain(); }
+  // collisions & timers
+  checkCollisions();
+  if(!game.whipReady){ game.whipCooldown-=dt; if(game.whipCooldown<=0){ game.whipCooldown=0; game.whipReady=true; } }
+  // render
+  ctx.clearRect(0,0,canvas.width/DPR,canvas.height/DPR);
+  drawBackground(); drawRoad();
+  // depth draw
+  const drawList=[];
+  game.cactus=game.cactus.filter(c=>c.z>game.distance-10);
+  for(const c of game.cactus) drawList.push({z:c.z, fn:()=>drawCactus(c)});
+  for(const v of game.villains) if(v.alive) drawList.push({z:v.z, fn:()=>drawVillain(v)});
+  drawList.sort((a,b)=>a.z-b.z); for(const d of drawList) d.fn();
+  drawPlayer(); drawWhipCD(); updateParticles(dt); drawParticles(); drawHUD();
+  // state
+  if(game.health<=0) game.state=State.LOSE;
+  if(game.state===State.PLAY && game.distance>=game.distanceGoal) startBoss();
+  if(game.state===State.BOSS) updateBoss(dt);
+  if(game.state===State.WIN){ banner('You rescued Elena! Ride on, Jesse.','Play Again (Enter)'); if(keys.has('Enter')) startPlay(); }
+  else if(game.state===State.LOSE){ banner('You were thrown from the saddle...','Retry (Enter)'); if(keys.has('Enter')) startPlay(); }
+  requestAnimationFrame(frame);
+}
+function banner(title,cta){
+  const w=canvas.width/DPR,h=canvas.height/DPR;
+  ctx.save(); ctx.fillStyle='rgba(0,0,0,.5)'; ctx.fillRect(0,0,w,h);
+  const pw=Math.min(540,w*0.9), ph=160, px=(w-pw)/2, py=(h-ph)/2;
+  ctx.fillStyle='rgba(255,255,255,.08)'; ctx.fillRect(px,py,pw,ph);
+  ctx.strokeStyle='rgba(255,255,255,.3)'; ctx.strokeRect(px,py,pw,ph);
+  ctx.fillStyle='#fff'; ctx.font='22px system-ui,-apple-system,sans-serif'; ctx.fillText(title,px+18,py+48);
+  ctx.font='16px system-ui,-apple-system,sans-serif'; ctx.fillText(cta,px+18,py+100);
+  ctx.restore();
+}
+requestAnimationFrame(frame);
+['gesturestart','gesturechange','gestureend','dblclick'].forEach(ev=>window.addEventListener(ev,e=>e.preventDefault(),{passive:false}));
+})();
+</script>
+</body>
+</html>
